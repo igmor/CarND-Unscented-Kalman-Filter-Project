@@ -25,12 +25,21 @@ public:
   ///* state vector: [pos1 pos2 vel_abs yaw_angle yaw_rate] in SI units and rad
   VectorXd x_;
 
+   ///* augmented state vector
+  VectorXd x_aug_;
+
   ///* state covariance matrix
   MatrixXd P_;
+
+  ///* Augmented state covariance matrix
+  MatrixXd P_aug_;
 
   ///* predicted sigma points matrix
   MatrixXd Xsig_pred_;
 
+  // Augmented Xsig matrix
+  MatrixXd Xsig_aug_;
+  
   ///* time when the state is true, in us
   long long time_us_;
 
@@ -67,6 +76,17 @@ public:
   ///* Sigma point spreading parameter
   double lambda_;
 
+  ///* additive radar measurement noise 
+  MatrixXd R_radar_;
+
+  ///* additive lidar measurement noise
+  MatrixXd R_laser_;
+
+  //* NIS for lidar
+  double NIS_laser_;
+
+  //* NIS for lidar
+  double NIS_radar_;
 
   /**
    * Constructor
@@ -102,6 +122,41 @@ public:
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
+
+  /**
+   * Updates the state and the state covariance matrix using a corresponding measurement
+   * model
+   * @param meas_package The measurement at k+1
+   * @param R radar/lidar measurment noise 
+   * @param n_z Number of dimensions in a measurement device
+   */
+  void UpdateMeasurements(MeasurementPackage meas_package, MatrixXd R, int n_z);
+
+   /**
+   * Generate a list of augmeneted sigma points
+   */
+  void GenerateAugmentedSigmaPoints();
+
+   /**
+   * Runs a Predicition phase for augmented sigma points
+   */  
+  void PredictAugmentedSigmaPoints(double delta_t);
+
+   /**
+   * Predicts state mean and covariance
+   */  
+  void PredictMeanAndCovariance();
+
+    /**
+   * Predicts lidar/radar measurements
+   * @param z_out Vector of predicted measurements
+   * @param S_out matrix 
+   * @param Z_seg_out the matrix of predicted measuruments of segmentation points
+   * @param R radar/lidar measurment noise 
+   * @param n_z measurments dimensions radar/lidar: 3/2
+   */
+  void PredictMeasurements(VectorXd* z_out, MatrixXd* S_out, MatrixXd* Zsig_out, MatrixXd R, int n_z);
+  
 };
 
 #endif /* UKF_H */

@@ -1,5 +1,6 @@
 #include <uWS/uWS.h>
 #include <iostream>
+#include <fstream>
 #include "json.hpp"
 #include <math.h>
 #include "ukf.h"
@@ -37,6 +38,10 @@ int main()
   Tools tools;
   vector<VectorXd> estimations;
   vector<VectorXd> ground_truth;
+
+  ofstream ofs;
+  ofs.open ("nis.out", std::ofstream::out | std::ofstream::trunc);
+  ofs.close();
 
   h.onMessage([&ukf,&tools,&estimations,&ground_truth](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -108,6 +113,17 @@ int main()
           //Call ProcessMeasurment(meas_package) for Kalman filter
     	  ukf.ProcessMeasurement(meas_package);    	  
 
+          ofstream ofs;
+          ofs.open ("nis.out", std::ofstream::out | std::ofstream::app);
+  
+          // output the NIS values
+          if (meas_package.sensor_type_ == MeasurementPackage::LASER) {
+              ofs << ukf.NIS_laser_ << "\n";
+          } else if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+              ofs << ukf.NIS_radar_ << "\n";
+          }          
+
+          ofs.close();
     	  //Push the current estimated x,y positon from the Kalman filter's state vector
 
     	  VectorXd estimate(4);
@@ -139,7 +155,6 @@ int main()
           auto msg = "42[\"estimate_marker\"," + msgJson.dump() + "]";
           // std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-	  
         }
       } else {
         
