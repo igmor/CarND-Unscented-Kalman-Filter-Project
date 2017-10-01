@@ -49,7 +49,7 @@ UKF::UKF() {
   P_aug_ = MatrixXd(n_aug_, n_aug_);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 4;
+  std_a_ = 2;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
   std_yawdd_ = 2;
@@ -87,6 +87,9 @@ UKF::UKF() {
   for (int i = 0; i < n_x_; i++)
       P_(i, i) = 1.0; 
 
+  P_(0, 0) = std_laspx_*std_laspx_;
+  P_(1, 1) = std_laspy_*std_laspy_;;
+  
   Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug_ + 1);
 
   R_radar_ = MatrixXd(3, 3);
@@ -120,12 +123,20 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
         if (meas_package.sensor_type_ == MeasurementPackage::RADAR)
         {
-            float phi = meas_package.raw_measurements_[1];
-            float ro = meas_package.raw_measurements_[0];
+            double ro = meas_package.raw_measurements_[0];
+            double phi = meas_package.raw_measurements_[1];
+            double rho_dot = meas_package.raw_measurements_[2];
+
+            double vx = rho_dot * cos(phi);
+            double vy = rho_dot * sin(phi);
+            double v = sqrt (vx*vx + vy*vy);
             
-            x_ << ro*cos(phi), ro*sin(phi), 0, 0, 0;
+            x_ << ro*cos(phi), ro*sin(phi), v, 0, 0;
         } else {
-            x_ << meas_package.raw_measurements_[0], meas_package.raw_measurements_[1], 0, 0, 0; 
+            x_ << meas_package.raw_measurements_[0], meas_package.raw_measurements_[1], 0, 0, 0;
+            if (fabs(x_[0]) < 0.001) x_[0] = 0.001;
+            if (fabs(x_[1]) < 0.001) x_[1] = 0.001;
+            
         }
         return;
     }
@@ -143,7 +154,10 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     if (meas_package.sensor_type_ == MeasurementPackage::LASER){
           use_laser_ = true;
           use_radar_ = false;
-          
+
+          if (fabs(meas_package.raw_measurements_[0]) < 0.001) meas_package.raw_measurements_[0] = 0.001;
+          if (fabs(meas_package.raw_measurements_[1]) < 0.001) meas_package.raw_measurements_[1] = 0.001;
+
           Prediction(delta_t);
           UpdateLidar(meas_package);
     }
@@ -227,9 +241,10 @@ void UKF::UpdateMeasurements(MeasurementPackage meas_package, MatrixXd R, int n_
         //residual
         VectorXd z_diff = Zsig.col(i) - z_pred;
         //angle normalization
-        while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
-        while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
-
+        if (use_radar_) {
+            while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
+            while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
+        }
         // state difference
         VectorXd x_diff = Xsig_pred_.col(i) - x_;
         //angle normalization
@@ -248,8 +263,10 @@ void UKF::UpdateMeasurements(MeasurementPackage meas_package, MatrixXd R, int n_
     VectorXd z_diff = z - z_pred;
 
     //angle normalization
-    while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
-    while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
+    if (use_radar_) {
+        while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
+        while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
+    }
 
     if (use_radar_)
         NIS_radar_ = z_diff.transpose() * S_inv * z_diff;
@@ -258,7 +275,9 @@ void UKF::UpdateMeasurements(MeasurementPackage meas_package, MatrixXd R, int n_
     
     //update state mean and covariance matrix
     x_ = x_ + K * z_diff;
-    P_ = P_ - K*S*K.transpose();    
+    P_ = P_ - K*S*K.transpose();
+
+    std::cout << "z: " << std::endl << z << std::endl;
 }
 
 void UKF::GenerateAugmentedSigmaPoints() {
@@ -369,9 +388,15 @@ void UKF::PredictMeasurements(VectorXd* z_out, MatrixXd* S_out, MatrixXd* Zsig_o
     double v  = Xsig_pred_(2,i);
     double yaw = Xsig_pred_(3,i);
 
+    while (yaw > M_PI) yaw-=2.*M_PI;
+    while (yaw <-M_PI) yaw+=2.*M_PI;
+
     double v1 = cos(yaw)*v;
     double v2 = sin(yaw)*v;
 
+    if (fabs(p_x) < 0.001) p_x = 0.001;
+    if (fabs(p_y) < 0.001) p_y = 0.001;
+    
     if (use_radar_) {
         // measurement model
         Zsig(0,i) = sqrt(p_x*p_x + p_y*p_y);                        //r
@@ -396,10 +421,6 @@ void UKF::PredictMeasurements(VectorXd* z_out, MatrixXd* S_out, MatrixXd* Zsig_o
   for (int i = 0; i < 2 * n_aug_ + 1; i++) {  //2n+1 simga points
     //residual
     VectorXd z_diff = Zsig.col(i) - z_pred;
-
-    //angle normalization
-    while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
-    while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
 
     S = S + weights_(i) * z_diff * z_diff.transpose();
   }
