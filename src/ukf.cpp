@@ -131,7 +131,9 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
             double vy = rho_dot * sin(phi);
             double v = sqrt (vx*vx + vy*vy);
             
-            x_ << ro*cos(phi), ro*sin(phi), v, 0, 0;
+            x_ << ro*cos(phi), ro*sin(phi), v, 2.5, .0;
+            //x_ << .0, .0, .0, 1.0, .0;
+            
         } else {
             x_ << meas_package.raw_measurements_[0], meas_package.raw_measurements_[1], 0, 0, 0;
             if (fabs(x_[0]) < 0.001) x_[0] = 0.001;
@@ -267,6 +269,8 @@ void UKF::UpdateMeasurements(MeasurementPackage meas_package, MatrixXd R, int n_
         while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
         while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
     }
+
+    std::cout << "zdiff: " << std::endl << z_diff << std::endl;
 
     if (use_radar_)
         NIS_radar_ = z_diff.transpose() * S_inv * z_diff;
